@@ -37,6 +37,18 @@ getExpr = id
 --------------------------------------------------------------------------------
 -- Reduce expresiones aritméticas/booleanas
 -- Construye sugerencias de la forma (LintCompCst e r)
+
+{- "(2 + 2) + (1 + 1)"
+Infix Add (Infix Add (Lit (LitInt 2)) (Lit (LitInt 2)))
+          (Infix Add (Lit (LitInt 1)) (Lit (LitInt 1)))
+
+(Lit (LitInt 6), [LintCompCst (Infix Add (Lit (LitInt 2)) (Lit (LitInt 2))) 
+                              (Lit (LitInt 4))
+                  ,LintCompCst (Infix Add (Lit (LitInt 1)) (Lit (LitInt 1))) 
+                              (Lit (LitInt 2))
+                  ,,LintCompCst (Infix Add (Lit (LitInt 4)) (Lit (LitInt 2))) 
+                              (Lit (LitInt 6))]) -}
+
 lintComputeConstant :: Linting Expr
 --lintComputeConstant = undefined
 --------------------------CODIGO AGREGADO
@@ -229,20 +241,32 @@ lintMap = undefined
 liftToFunc :: Linting Expr -> Linting FunDef
 --liftToFunc = undefined
 --------------------------CODIGO AGREGADO
-liftToFunc lintExpr = do
+liftToFunc lintingFunDef (FunDef name body) = 
+  let (modifiedBody, suggestions) = lintingFunDef body
+  in (FunDef name modifiedBody, suggestions)
+{- liftToFunc lintExpr = do
   (FunDef name body) <- getFuncDef
   expr <- lintExpr body
-  return $ FunDef name expr
+  return $ FunDef name expr -}
 --------------------------END CODIGO AGREGADO
 
 -- encadenar transformaciones:
+{- e -> l1 -> e' ls
+e' -> l2 -> e'' ls'
+e -> l1 >==> l2 -> e'' (ls ++ ls') -}
+
 (>==>) :: Linting a -> Linting a -> Linting a
+
 --lint1 >==> lint2 = undefined
 --------------------------CODIGO AGREGADO
-lint1 >==> lint2 = do
+(>==>) lint1 lint2 x = 
+  let (x', suggestions1) = lint1 x
+      (x'', suggestions2) = lint2 x'
+  in (x'', suggestions1 ++ suggestions2)
+{- lint1 >==> lint2 = do
   result1 <- lint1
   result2 <- lint2
-  return result2
+  return result2 -}
 --------------------------END CODIGO AGREGADO
 
 -- aplica las transformaciones 'lints' repetidas veces y de forma incremental,
@@ -250,9 +274,14 @@ lint1 >==> lint2 = do
 lintRec :: Linting a -> Linting a
 --lintRec lints func = undefined
 --------------------------CODIGO AGREGADO
-lintRec lints func = do
+lintRec lintFunc x = 
+  let (x', suggestions1) = lintFunc x
+      (x'', suggestions2) = lintFunc x'
+  in if x' == x'' then (x', suggestions1 ++ suggestions2) else lintRec lintFunc x''
+
+{- lintRec lints func = do
   result <- lints func
   if result == func
     then return result
-    else lintRec lints result
+    else lintRec lints result -}
 --------------------------END CODIGO AGREGADO

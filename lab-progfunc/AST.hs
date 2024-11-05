@@ -2,8 +2,11 @@ module AST where
 
 data Expr = Var Name 
           | Lit Lit
-          | Infix Op Expr Expr | App Expr Expr | Lam Name Expr
-          | Case Expr Expr (Name, Name, Expr) | If Expr Expr Expr
+          | Infix Op Expr Expr 
+          | App Expr Expr 
+          | Lam Name Expr
+          | Case Expr Expr (Name, Name, Expr) 
+          | If Expr Expr Expr
   deriving (Eq, Show)
 
 data FunDef = FunDef Name Expr deriving (Eq, Show)
