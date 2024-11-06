@@ -15,7 +15,6 @@ freeVariables :: Expr -> [Name]
 freeVariables (Var x) = [x]
 freeVariables (Lam x e) = filter (/= x) (freeVariables e)
 freeVariables (App e1 e2) = freeVariables e1 ++ freeVariables e2
---freeVariables (Let x e1 e2) = freeVariables e1 ++ filter (/= x) (freeVariables e2)
 freeVariables (Lit _) = []
 freeVariables (Infix Add e1 e2) = freeVariables e1 ++ freeVariables e2
 freeVariables (Infix Mult e1 e2) = freeVariables e1 ++ freeVariables e2
@@ -26,8 +25,6 @@ freeVariables (If cond th el) = freeVariables cond ++ freeVariables th ++ freeVa
 --------------------------------------------------------------------------------
 -- LINTINGS
 --------------------------------------------------------------------------------
-getExpr :: Expr -> Expr
-getExpr = id
 
 
 --------------------------------------------------------------------------------
@@ -50,33 +47,9 @@ Infix Add (Infix Add (Lit (LitInt 2)) (Lit (LitInt 2)))
                               (Lit (LitInt 6))]) -}
 
 lintComputeConstant :: Linting Expr
---lintComputeConstant = undefined
+lintComputeConstant = undefined
 --------------------------CODIGO AGREGADO
-lintComputeConstant expr = case expr of
-    Infix Add (Lit (LitInt n1)) (Lit (LitInt n2)) 
-        | n1 + n2 >= 0 -> return (Lit (LitInt (n1 + n2)), [LintCompCst expr (Lit (LitInt (n1 + n2)))])
-        | otherwise -> return (expr, [])
-    
-    Infix Sub (Lit (LitInt n1)) (Lit (LitInt n2)) 
-        | n1 - n2 >= 0 -> return (Lit (LitInt (n1 - n2)), [LintCompCst expr (Lit (LitInt (n1 - n2)))])
-        | otherwise -> return (expr, [])
-    
-    Infix Mult (Lit (LitInt n1)) (Lit (LitInt n2)) 
-        | n1 * n2 >= 0 -> return (Lit (LitInt (n1 * n2)), [LintCompCst expr (Lit (LitInt (n1 * n2)))])
-        | otherwise -> return (expr, [])
 
-    Infix Div (Lit (LitInt n1)) (Lit (LitInt n2)) 
-        | n2 == 0 -> return (expr, [])  -- No se sugiere en caso de división por cero
-        | otherwise -> return (Lit (LitInt (n1 `div` n2)), [LintCompCst expr (Lit (LitInt (n1 `div` n2)))])
-    
-    Infix And (Lit (LitBool b1)) (Lit (LitBool b2)) -> 
-        return (Lit (LitBool (b1 && b2)), [LintCompCst expr (Lit (LitBool (b1 && b2)))])
-    
-    Infix Or (Lit (LitBool b1)) (Lit (LitBool b2)) -> 
-        return (Lit (LitBool (b1 || b2)), [LintCompCst expr (Lit (LitBool (b1 || b2)))])
-    
-    -- Otras combinaciones no deben ser evaluadas
-    _ -> return (expr, [])
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -87,16 +60,9 @@ lintComputeConstant expr = case expr of
 -- Elimina chequeos de la forma e == True, True == e, e == False y False == e
 -- Construye sugerencias de la forma (LintBool e r)
 lintRedBool :: Linting Expr
---lintRedBool = undefined
+lintRedBool = undefined
 --------------------------CODIGO AGREGADO
-lintRedBool = do
-  expr <- getExpr
-  case expr of
-    Infix Eq e (Lit True) -> return e
-    Infix Eq (Lit True) e -> return e
-    Infix Eq e (Lit False) -> return (If e (Lit 0) (Lit 1))
-    Infix Eq (Lit False) e -> return (If e (Lit 1) (Lit 0))
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -107,40 +73,27 @@ lintRedBool = do
 -- Sustitución de if con literal en la condición por la rama correspondiente
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfCond :: Linting Expr
---lintRedIfCond = undefined
+lintRedIfCond = undefined
 --------------------------CODIGO AGREGADO
-lintRedIfCond = do
-  expr <- getExpr
-  case expr of
-    If (Lit True) th _ -> return th
-    If (Lit False) _ el -> return el
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
 -- Sustitución de if por conjunción entre la condición y su rama _then_
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfAnd :: Linting Expr
---lintRedIfAnd = undefined
+lintRedIfAnd = undefined
 --------------------------CODIGO AGREGADO
-lintRedIfAnd = do
-  expr <- getExpr
-  case expr of
-    If cond th el -> return $ If (Add cond (Lit 1)) th el
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
 -- Sustitución de if por disyunción entre la condición y su rama _else_
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfOr :: Linting Expr
---lintRedIfOr = undefined
+lintRedIfOr = undefined
 --------------------------CODIGO AGREGADO
-lintRedIfOr = do
-  expr <- getExpr
-  case expr of
-    If cond th el -> return $ If (Add cond (Lit 0)) th el
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -150,26 +103,9 @@ lintRedIfOr = do
 -- Construye sugerencias de la forma (LintNull e r)
 
 lintNull :: Linting Expr
---lintNull = undefined
+lintNull = undefined
 --------------------------CODIGO AGREGADO
-lintNull expr = case expr of
-    Infix Eq (Lit (Lit [])) e -> 
-        return (App (Var "null") e, [LintNull expr (App (Var "null") e)])  -- Reemplaza e == []
-    
-    Infix Eq e (Lit (Lit [])) -> 
-        return (App (Var "null") e, [LintNull expr (App (Var "null") e)])  -- Reemplaza [] == e
-    
-    Infix Eq (App (Var "length") e) (Lit (LitInt 0)) -> 
-        return (App (Var "null") e, [LintNull expr (App (Var "null") e)])  -- Reemplaza length e == 0
-    
-    Infix Eq (Lit (LitInt 0)) (App (Var "length") e) -> 
-        return (App (Var "null") e, [LintNull expr (App (Var "null") e)])  -- Reemplaza 0 == length e
-    
-    App (Var "length") e -> 
-        return (e, [LintNull expr (App (Var "null") e)])  -- Sugerencia de reemplazo para length
 
-    -- Procesamos recursivamente subexpresiones
-    _ -> return (expr, [])
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -179,13 +115,9 @@ lintNull expr = case expr of
 -- Construye sugerencias de la forma (LintAppend e r)
 
 lintAppend :: Linting Expr
---lintAppend = undefined
+lintAppend = undefined
 --------------------------CODIGO AGREGADO
-lintAppend = do
-  expr <- getExpr
-  case expr of
-    App (App (Var "++") (App (Var ":") [e, []])) es -> return (App (Var ":") [e, es])
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -195,13 +127,9 @@ lintAppend = do
 -- Construye sugerencias de la forma (LintComp e r)
 
 lintComp :: Linting Expr
---lintComp = undefined
+lintComp = undefined
 --------------------------CODIGO AGREGADO
-lintComp = do
-  expr <- getExpr
-  case expr of
-    App f (App g t) -> return $ App (App (Var ".") [f, g]) t
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -211,13 +139,9 @@ lintComp = do
 -- Construye sugerencias de la forma (LintEta e r)
 
 lintEta :: Linting Expr
---lintEta = undefined
+lintEta = undefined
 --------------------------CODIGO AGREGADO
-lintEta = do
-  expr <- getExpr
-  case expr of
-    Lam x (App e (Var x')) | x == x' -> return e
-    _ -> return expr
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -229,6 +153,7 @@ lintEta = do
 lintMap :: Linting FunDef
 lintMap = undefined
 -------------------------- CODIGO AGREGADO
+
 --------------------------END CODIGO AGREGADO
 
 --------------------------------------------------------------------------------
@@ -241,13 +166,9 @@ lintMap = undefined
 liftToFunc :: Linting Expr -> Linting FunDef
 --liftToFunc = undefined
 --------------------------CODIGO AGREGADO
-liftToFunc lintingFunDef (FunDef name body) = 
-  let (modifiedBody, suggestions) = lintingFunDef body
-  in (FunDef name modifiedBody, suggestions)
-{- liftToFunc lintExpr = do
-  (FunDef name body) <- getFuncDef
-  expr <- lintExpr body
-  return $ FunDef name expr -}
+liftToFunc lintExpr (FunDef name body) =
+  let (newBody, suggestions) = lintExpr body
+  in (FunDef name newBody, suggestions)
 --------------------------END CODIGO AGREGADO
 
 -- encadenar transformaciones:
@@ -256,32 +177,69 @@ e' -> l2 -> e'' ls'
 e -> l1 >==> l2 -> e'' (ls ++ ls') -}
 
 (>==>) :: Linting a -> Linting a -> Linting a
-
 --lint1 >==> lint2 = undefined
 --------------------------CODIGO AGREGADO
-(>==>) lint1 lint2 x = 
-  let (x', suggestions1) = lint1 x
-      (x'', suggestions2) = lint2 x'
-  in (x'', suggestions1 ++ suggestions2)
-{- lint1 >==> lint2 = do
-  result1 <- lint1
-  result2 <- lint2
-  return result2 -}
+l1 >==> l2 = \expr ->
+  let (expr', suggestions1) = l1 expr
+      (expr'', suggestions2) = l2 expr'
+  in (expr'', suggestions1 ++ suggestions2)
 --------------------------END CODIGO AGREGADO
+
 
 -- aplica las transformaciones 'lints' repetidas veces y de forma incremental,
 -- hasta que ya no generen más cambios en 'func'
 lintRec :: Linting a -> Linting a
 --lintRec lints func = undefined
 --------------------------CODIGO AGREGADO
-lintRec lintFunc x = 
-  let (x', suggestions1) = lintFunc x
-      (x'', suggestions2) = lintFunc x'
-  in if x' == x'' then (x', suggestions1 ++ suggestions2) else lintRec lintFunc x''
+lintRec lints func = applyLints func []
+   where
+    -- Subfunción para aplicar los lints hasta que no haya cambios
+    applyLints func suggestions =
+      let (newFunc, newSuggestions) = lints func
+      in if compareByStringAux newFunc func
+         then (newFunc, suggestions)  -- Termina cuando no hay más cambios
+         else applyLints newFunc (suggestions ++ newSuggestions)
 
-{- lintRec lints func = do
-  result <- lints func
-  if result == func
-    then return result
-    else lintRec lints result -}
+    -- Subfunción auxiliar de comparación basada en la conversión a String (sin modificar la firma de lintRec)
+    compareByStringAux :: (ShowExpr a) => a -> a -> Bool
+    compareByStringAux x y = showExpr x == showExpr y
+
+    
 --------------------------END CODIGO AGREGADO
+
+class ShowExpr a where
+  showExpr :: a -> String
+
+instance ShowExpr FunDef where
+  showExpr (FunDef name body) = 
+    "fun " ++ name ++ " = " ++ showExpr body
+
+instance ShowExpr Expr where
+  showExpr (Var name)          = name
+  showExpr (Lit lit)           = showLit lit
+  showExpr (Infix op e1 e2)    = "(" ++ showExpr e1 ++ " " ++ showOp op ++ " " ++ showExpr e2 ++ ")"
+  showExpr (App e1 e2)         = showExpr e1 ++ " " ++ showExpr e2
+  showExpr (Lam name body)     = "\\" ++ name ++ " -> " ++ showExpr body
+  showExpr (Case expr alt (n1, n2, expr2)) = 
+    "case " ++ showExpr expr ++ " of " ++ n1 ++ " " ++ n2 ++ " -> " ++ showExpr expr2
+  showExpr (If cond thenExpr elseExpr) = 
+    "if " ++ showExpr cond ++ " then " ++ showExpr thenExpr ++ " else " ++ showExpr elseExpr
+
+showLit :: Lit -> String
+showLit (LitInt i)  = show i
+showLit (LitBool b) = show b
+showLit LitNil      = "[]"
+
+showOp :: Op -> String
+showOp Add    = "+"
+showOp Sub    = "-"
+showOp Mult   = "*"
+showOp Div    = "/"
+showOp Eq     = "=="
+showOp GTh    = ">"
+showOp LTh    = "<"
+showOp And    = "&&"
+showOp Or     = "||"
+showOp Cons   = ":"
+showOp Comp   = "."
+showOp Append = "++" 
