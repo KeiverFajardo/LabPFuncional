@@ -1,0 +1,7 @@
+add = \x -> x+(1+1)+(2+2)
+mul = 2 * 2
+juan = 10 - 2  
+raul = 9 - 9   
+pepe = 6 div 0
+Carlos = 6 div 2  
+  
