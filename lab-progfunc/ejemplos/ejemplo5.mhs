@@ -1,0 +1,5 @@
+add = \x -> x == True
+mul = \y -> True == y
+pepe = \x -> x == False
+carlos = \y -> False == y
+raul = \x -> \y -> (x == True) || (True == y)

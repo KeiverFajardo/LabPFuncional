@@ -1,0 +1,5 @@
+foo = if True then t else e  
+bar = if False then t else e
+car = if c then True else e
+top = if c then e else False
+largo = if True then x + if False then 1 else 2 else 3

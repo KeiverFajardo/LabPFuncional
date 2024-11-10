@@ -1,0 +1,3 @@
+bar = \ls -> case ls of
+    []       -> [];
+    (x : xs) -> (x + 1) : incr xs

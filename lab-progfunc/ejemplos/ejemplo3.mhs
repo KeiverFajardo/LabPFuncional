@@ -3,3 +3,17 @@ foo = 1 +  if True then 2 else 4
 bar = \xs -> case xs of
     []       -> [];
     (l : ls) -> (\ys -> (\ls -> length ls == 0) ys) l:[] ++ bar ls
+
+
+mul = 2 * 2
+juan = 10 - 2  
+raul = 9 - 9   
+pepe = 6 div 0
+Carlos = 6 div 2  
+kei = True && False
+alf = False || True
+
+foo = if True then t else e  
+bar = if False then t else e
+car = if c then True else e
+top = if c then e else False
