@@ -156,6 +156,18 @@ lintRedBool expr = case expr of
 -- Construye sugerencias de la forma (LintRedIf e r) REVISAR los IF EJ 6
 lintRedIfCond :: Linting Expr
 lintRedIfCond expr = case expr of
+    If (Lit (LitBool True)) thenExpr _ ->
+      let (simplifiedThen, suggestionsThen) = lintRedIfCond thenExpr
+          -- Reconstruimos el `If` con las ramas simplificadas
+          simplifiedExpr = If (Lit (LitBool True)) simplifiedThen elseExpr
+      in (simplifiedExpr, suggestionsThen)
+
+        
+    Infix Add (Lit (LitInt x)) other -> 
+        let (simplifiedThen, suggestionsThen) = lintRedIfCond other
+            simplifiedExpr = Infix Add (Lit (LitInt x)) simplifiedThen
+        in (simplifiedExpr, suggestionsThen)
+
     -- Caso: if True then t else e => t
     If (Lit (LitBool True)) t _ -> 
         let (t', suggestions) = lintRedIfCond t  -- Simplificamos la rama `then` si es necesario
@@ -218,8 +230,20 @@ lintNull expr = case expr of
             result = App (Var "null") e'  -- Reemplazamos por null
         in (result, suggestionsE ++ [LintNull expr result])
 
+    -- Caso: 0 == length e => null e
+    Infix Eq (Lit (LitInt 0)) (App (Var "length") e) -> 
+        let (e', suggestionsE) = lintNull e  -- Simplificamos la lista
+            result = App (Var "null") e'  -- Reemplazamos por null
+        in (result, suggestionsE ++ [LintNull expr result])
+
     -- Caso: e == [] => null e
     Infix Eq e (Lit LitNil) -> 
+        let (e', suggestionsE) = lintNull e  -- Simplificamos la lista
+            result = App (Var "null") e'  -- Reemplazamos por null
+        in (result, suggestionsE ++ [LintNull expr result])
+
+    -- Caso: [] == e => null e
+    Infix Eq (Lit LitNil) e -> 
         let (e', suggestionsE) = lintNull e  -- Simplificamos la lista
             result = App (Var "null") e'  -- Reemplazamos por null
         in (result, suggestionsE ++ [LintNull expr result])
