@@ -132,6 +132,12 @@ lintRedBool expr = case expr of
             result = App (Var "not") e'
         in (result, suggestions ++ [LintBool expr result])
 
+    If e1 e2 e3 -> 
+        let (e1', suggestions1) = lintRedBool e1
+            (e2', suggestions2) = lintRedBool e2
+            (e3', suggestions3) = lintRedBool e3
+        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
+
     -- Caso para lambdas: recorrer el cuerpo de la lambda
     Lam name body ->
         let (body', suggestions) = lintRedBool body
@@ -164,6 +170,10 @@ lintRedIfCond expr = case expr of
         let result = (Lit (LitInt x))
         in (result, [LintRedIf expr result])
 
+    If (Lit (LitBool True)) (Lit (LitInt y)) (Var "x") ->
+        let result = (Lit (LitInt y))
+        in (result, [LintRedIf expr result])
+
     If (Lit (LitBool True)) (Infix Add (Var "x") (Lit (LitInt x))) (Lit (LitInt y)) ->
         let result = (Infix Add (Var "x") (Lit (LitInt x)))
         in (result, [LintRedIf expr result])
@@ -179,6 +189,28 @@ lintRedIfCond expr = case expr of
     Infix Add (Var "x") other -> 
         let (simplifiedThen, suggestionsThen) = lintRedIfCond other
         in (Infix Add (Var "x") simplifiedThen, suggestionsThen)
+
+    Infix Add (Lit (LitInt y)) other -> 
+        let (simplifiedThen, suggestionsThen) = lintRedIfCond other
+        in (Infix Add (Lit (LitInt y)) simplifiedThen, suggestionsThen)
+
+    Infix And (Lit (LitBool False)) other  -> 
+        let result = (Lit (LitBool False))
+            (simplifiedThen, suggestionsThen) = lintRedIfCond other
+         {- (Infix Add simplifiedThen (Lit (LitInt y)), suggestionsThen) -}
+        in (result, suggestionsThen ++ [LintRedIf expr result])
+
+    Infix Add other (Lit (LitInt y)) -> 
+        let (simplifiedThen, suggestionsThen) = lintRedIfCond other
+        in (Infix Add simplifiedThen (Lit (LitInt y)), suggestionsThen)
+
+    {- Infix Add left right -> 
+        let (left', suggestionsLeft) = lintRedIfCond left
+            (right', suggestionsRight) = lintRedIfCond right
+            simplifiedExpr = Infix Add left' right'
+        in if simplifiedExpr /= expr
+          then (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
+          else (expr, suggestionsLeft ++ suggestionsRight) -}
 
     {- If (Lit (LitBool True)) thenExpr elseExpr ->
       let (simplifiedThen, suggestionsThen) = lintRedIfCond thenExpr
