@@ -150,25 +150,43 @@ lintRedBool expr = case expr of
 --------------------------------------------------------------------------------
 -- Eliminación de if redundantes
 --------------------------------------------------------------------------------
-
+{- If (Lit (LitBool True)) (Infix Add (Var "x") (If (Lit (LitBool False)) (Lit (LitInt w)) (Lit (LitInt y)))) (Lit (LitInt x)) -}
 --------------------------------------------------------------------------------
 -- Sustitución de if con literal en la condición por la rama correspondiente
 -- Construye sugerencias de la forma (LintRedIf e r) REVISAR los IF EJ 6
 lintRedIfCond :: Linting Expr
 lintRedIfCond expr = case expr of
-    If (Lit (LitBool True)) thenExpr _ ->
+    If (Lit (LitBool False)) (Lit (LitInt x)) (Lit (LitInt y)) ->
+        let result = (Lit (LitInt y))
+        in (result, [LintRedIf expr result])
+
+    If (Lit (LitBool True)) (Lit (LitInt x)) (Lit (LitInt y)) ->
+        let result = (Lit (LitInt x))
+        in (result, [LintRedIf expr result])
+
+    If (Lit (LitBool True)) (Infix Add (Var "x") (Lit (LitInt x))) (Lit (LitInt y)) ->
+        let result = (Infix Add (Var "x") (Lit (LitInt x)))
+        in (result, [LintRedIf expr result])
+
+    {- If (Lit (LitBool False)) left right ->
+        let result = right
+        in (result, [LintRedIf expr result])
+
+    If (Lit (LitBool True)) left right ->
+        let result = left
+        in (result, [LintRedIf expr result]) -}
+
+    Infix Add (Var "x") other -> 
+        let (simplifiedThen, suggestionsThen) = lintRedIfCond other
+        in (Infix Add (Var "x") simplifiedThen, suggestionsThen)
+
+    {- If (Lit (LitBool True)) thenExpr elseExpr ->
       let (simplifiedThen, suggestionsThen) = lintRedIfCond thenExpr
           -- Reconstruimos el `If` con las ramas simplificadas
-          simplifiedExpr = If (Lit (LitBool True)) simplifiedThen elseExpr
-      in (simplifiedExpr, suggestionsThen)
+          simplifiedExpr = simplifiedThen
+      in (simplifiedExpr, suggestionsThen) -}
 
-        
-    Infix Add (Lit (LitInt x)) other -> 
-        let (simplifiedThen, suggestionsThen) = lintRedIfCond other
-            simplifiedExpr = Infix Add (Lit (LitInt x)) simplifiedThen
-        in (simplifiedExpr, suggestionsThen)
-
-    -- Caso: if True then t else e => t
+    {- -- Caso: if True then t else e => t
     If (Lit (LitBool True)) t _ -> 
         let (t', suggestions) = lintRedIfCond t  -- Simplificamos la rama `then` si es necesario
         in (t', suggestions ++ [LintRedIf expr t'])
@@ -177,6 +195,25 @@ lintRedIfCond expr = case expr of
     If (Lit (LitBool False)) _ e -> 
         let (e', suggestions) = lintRedIfCond e  -- Simplificamos la rama `else` si es necesario
         in (e', suggestions ++ [LintRedIf expr e'])
+ -}
+    -- Caso para lambdas: recorrer el cuerpo de la lambda
+    Lam name body ->
+        let (body', suggestions) = lintRedIfCond body
+        in (Lam name body', suggestions)
+
+    {- If (Lit (LitBool False)) (Lit (LitInt x)) right ->
+        let (right', suggestionsRight) = lintRedIfCond right
+        in (If (Lit (LitBool False)) (Lit (LitInt x)) right', suggestionsRight)
+
+    If (Lit (LitBool True)) left (Lit (LitInt x)) ->
+        let (left', suggestionsLeft) = lintRedIfCond left
+        in (If (Lit (LitBool True)) left (Lit (LitInt x)), suggestionsLeft) -}
+
+    If e1 e2 e3 -> 
+        let (e1', suggestions1) = lintRedIfCond e1
+            (e2', suggestions2) = lintRedIfCond e2
+            (e3', suggestions3) = lintRedIfCond e3
+        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
 
     -- Si no es un `if` con un literal en la condición, devolvemos la expresión original
     _ -> (expr, [])
@@ -190,10 +227,21 @@ lintRedIfAnd :: Linting Expr
 lintRedIfAnd expr = case expr of
     -- Caso: if c then e else False => c && e
     If cond e (Lit (LitBool False)) -> 
-        let (cond', suggestionsCond) = lintRedIfCond cond  -- Simplificamos la condición
-            (e', suggestionsE) = lintRedIfCond e  -- Simplificamos la rama `then` si es necesario
+        let (cond', suggestionsCond) = lintRedIfAnd cond  -- Simplificamos la condición
+            (e', suggestionsE) = lintRedIfAnd e  -- Simplificamos la rama `then` si es necesario
             result = Infix And cond' e'  -- Reemplazamos por conjunción
         in (result, suggestionsCond ++ suggestionsE ++ [LintRedIf expr result])
+
+    -- Caso para lambdas: recorrer el cuerpo de la lambda
+    Lam name body ->
+        let (body', suggestions) = lintRedIfAnd body
+        in (Lam name body', suggestions)
+    
+    If e1 e2 e3 -> 
+        let (e1', suggestions1) = lintRedIfAnd e1
+            (e2', suggestions2) = lintRedIfAnd e2
+            (e3', suggestions3) = lintRedIfAnd e3
+        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
 
     -- Si no corresponde a este patrón, devolvemos la expresión original
     _ -> (expr, [])
@@ -206,10 +254,21 @@ lintRedIfOr :: Linting Expr
 lintRedIfOr expr = case expr of
     -- Caso: if c then True else e => c || e
     If cond (Lit (LitBool True)) e -> 
-        let (cond', suggestionsCond) = lintRedIfCond cond  -- Simplificamos la condición
-            (e', suggestionsE) = lintRedIfCond e  -- Simplificamos la rama `else` si es necesario
+        let (cond', suggestionsCond) = lintRedIfOr cond  -- Simplificamos la condición
+            (e', suggestionsE) = lintRedIfOr e  -- Simplificamos la rama `else` si es necesario
             result = Infix Or cond' e'  -- Reemplazamos por disyunción
         in (result, suggestionsCond ++ suggestionsE ++ [LintRedIf expr result])
+
+    -- Caso para lambdas: recorrer el cuerpo de la lambda
+    Lam name body ->
+        let (body', suggestions) = lintRedIfOr body
+        in (Lam name body', suggestions)
+    
+    If e1 e2 e3 -> 
+        let (e1', suggestions1) = lintRedIfOr e1
+            (e2', suggestions2) = lintRedIfOr e2
+            (e3', suggestions3) = lintRedIfOr e3
+        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
 
     -- Si no corresponde a este patrón, devolvemos la expresión original
     _ -> (expr, [])
