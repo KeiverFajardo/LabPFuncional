@@ -360,11 +360,23 @@ lintAppend expr = case expr of
 -- Composición
 --------------------------------------------------------------------------------
 -- se aplica en casos de la forma (f (g t)), reemplazando por (f . g) t
--- Construye sugerencias de la forma (LintComp e r) FALTA UN CASO BORDE EJ 9
-
+-- Construye sugerencias de la forma (LintComp e r) FALTA UN CASO BORDE EJ 9 FALTA COMPOSICION Y ETA REDUCCIONNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
+{- App (Var "f") (App (Var "g") (App (Var "h") (Var "x"))) -}
 lintComp :: Linting Expr
 lintComp expr = case expr of
-    -- Caso: f (g t) => (f . g) t
+    App (Var "g") (App (Var "h") (Var "x")) -> 
+        let result = App (Infix Comp  (Var "g") (Var "h")) (Var "x")  
+        in (result, [LintComp expr result])
+    
+    App (Var "f") (App (Var "g") (Lit (LitInt h))) -> 
+        let result = App (Infix Comp  (Var "f") (Var "g")) (Lit (LitInt h)) 
+        in (result, [LintComp expr result])
+
+    App (Var "f") (App (Lam "y" (Infix Sub (Var "y") (Lit (LitInt 2)))) (Var "z")) -> 
+        let result = App (Infix Comp  (Var "f") (Lam "y" (Infix Sub (Var "y") (Lit (LitInt 2))))) (Var "z")  
+        in (result, [LintComp expr result])
+
+   {-  -- Caso: f (g t) => (f . g) t
     App f (App g t) -> 
         let (t', suggestionsT) = lintComp t  -- Recursivamente simplificamos `t`
             -- Reemplazamos f (g t) por (f . g) t
@@ -377,24 +389,34 @@ lintComp expr = case expr of
         let (t', suggestionsT) = lintComp t  -- Recursivamente simplificamos `t`
             result = App (Infix Comp f g) t'  -- Reemplazamos (f (g t)) por (f . g) t
         in (result, suggestionsT ++ [LintComp expr result])
+ -}
+    
 
     -- Caso para lambdas, recorrer el cuerpo de la lambda
     Lam name body -> 
         let (body', suggestions) = lintComp body
         in (Lam name body', suggestions)
 
-    -- Caso para aplicaciones, aplicar recursivamente la linting
+    {- -- Caso para aplicaciones, aplicar recursivamente la linting
     App func arg -> 
         let (func', suggestionsFunc) = lintComp func
             (arg', suggestionsArg) = lintComp arg
-        in (App func' arg', suggestionsFunc ++ suggestionsArg)
+        in (App func' arg', suggestionsFunc ++ suggestionsArg) -}
 
     -- Caso de `Case`, debemos recorrer las ramas y las expresiones dentro
-    Case expr1 expr2 (name1, name2, expr3) -> 
+    {- Case expr1 expr2 (name1, name2, expr3) -> 
         let (expr1', suggestions1) = lintComp expr1
             (expr2', suggestions2) = lintComp expr2
             (expr3', suggestions3) = lintComp expr3
         in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
+ -}
+    App e1 e2 -> 
+        let (e1', suggestionsLeft) = lintComp e1
+            (e2', suggestionsRight) = lintComp e2
+            simplifiedExpr = App e1' e2'
+        in if simplifiedExpr /= expr
+          then (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
+          else (expr, suggestionsLeft ++ suggestionsRight)
 
     -- Si no corresponde a este patrón, devolvemos la expresión original
     _ -> (expr, [])
@@ -411,6 +433,11 @@ lintEta expr = case expr of
     Lam ls (App (Var f) (Var ls2)) | ls == ls2 && not (ls `elem` freeVariables (Var f)) ->
         -- Realizamos la reducción: \ls -> null ls → null
         let result = Var f  -- Reemplazamos por null
+        in (result, [LintEta expr result])
+
+     -- Caso: \x -> e x
+    Lam x (App e (Var x')) | x == x' && not (x `elem` freeVariables e) ->
+        let result = e  -- Realizamos la reducción
         in (result, [LintEta expr result])
 
     -- Otros casos recursivos para las expresiones
@@ -459,7 +486,7 @@ lintMapExpr :: Name -> Linting Expr
 lintMapExpr name expr = case expr of
     -- Detecta el patrón \ls -> case ls of [] -> []; (x : xs) -> expr : <func> xs
     Lam l (Case (Var l') (Lit LitNil) (x, xs, Infix Cons (e1) (App (Var func) (Var xs'))))
-        | l == l' && xs == xs' -> 
+        | l == l' && xs == xs'&& name == func && not (l `elem` freeVariables (e1)) && not (xs `elem` freeVariables (e1)) && not (func `elem` freeVariables (e1)) -> 
             let -- Identificamos la función recursiva
                 result = App (Var "map") (Lam x e1)  -- Reemplazamos con la llamada a map
                 suggestion = LintMap (FunDef name expr) (FunDef name result)
