@@ -169,6 +169,10 @@ lintRedIfCond expr = case expr of
     If (Lit (LitBool True)) (Lit (LitInt x)) (Lit (LitInt y)) ->
         let result = (Lit (LitInt x))
         in (result, [LintRedIf expr result])
+    
+    If (Lit (LitBool True)) (Lit (LitBool True)) (Lit (LitBool False)) ->
+        let result = (Lit (LitBool True))
+        in (result, [LintRedIf expr result])
 
     If (Lit (LitBool True)) (Lit (LitInt y)) (Var "x") ->
         let result = (Lit (LitInt y))
@@ -194,15 +198,16 @@ lintRedIfCond expr = case expr of
         let (simplifiedThen, suggestionsThen) = lintRedIfCond other
         in (Infix Add (Lit (LitInt y)) simplifiedThen, suggestionsThen)
 
-    Infix And (Lit (LitBool False)) other  -> 
-        let result = (Lit (LitBool False))
-            (simplifiedThen, suggestionsThen) = lintRedIfCond other
-         {- (Infix Add simplifiedThen (Lit (LitInt y)), suggestionsThen) -}
-        in (result, suggestionsThen ++ [LintRedIf expr result])
-
     Infix Add other (Lit (LitInt y)) -> 
         let (simplifiedThen, suggestionsThen) = lintRedIfCond other
         in (Infix Add simplifiedThen (Lit (LitInt y)), suggestionsThen)
+
+    {- Infix And (Lit (LitBool False)) other  -> 
+        let (simplifiedThen, suggestionsThen) = lintRedIfCond other
+            result =  simplifiedThen
+            
+         {- (Infix Add simplifiedThen (Lit (LitInt y)), suggestionsThen) -}
+        in (result, suggestionsThen ++ [LintRedIf expr result]) -}
 
     {- Infix Add left right -> 
         let (left', suggestionsLeft) = lintRedIfCond left
@@ -240,6 +245,11 @@ lintRedIfCond expr = case expr of
     If (Lit (LitBool True)) left (Lit (LitInt x)) ->
         let (left', suggestionsLeft) = lintRedIfCond left
         in (If (Lit (LitBool True)) left (Lit (LitInt x)), suggestionsLeft) -}
+
+    Infix op e2 e3 ->
+        let (e2', suggestions2) = lintRedIfCond e2
+            (e3', suggestions3) = lintRedIfCond e3
+        in (Infix op e2' e3', suggestions2 ++ suggestions3)
 
     If e1 e2 e3 -> 
         let (e1', suggestions1) = lintRedIfCond e1
