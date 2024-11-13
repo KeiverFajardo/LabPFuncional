@@ -78,6 +78,12 @@ lintComputeConstant expr = case expr of
           then (simplifiedExpr, suggestionsLeft)
           else (expr, suggestionsLeft) -}
 
+    If e1 e2 e3 -> 
+        let (e1', suggestions1) = lintComputeConstant e1
+            (e2', suggestions2) = lintComputeConstant e2
+            (e3', suggestions3) = lintComputeConstant e3
+        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
+
     -- Caso Recursivo: Explorar subexpresiones
     Infix op left right ->
         let (left', suggestionsLeft) = lintComputeConstant left
@@ -170,16 +176,16 @@ lintRedIfCond expr = case expr of
         let result = (Lit (LitInt x))
         in (result, [LintRedIf expr result])
     
-    If (Lit (LitBool True)) (Lit (LitBool True)) (Lit (LitBool False)) ->
-        let result = (Lit (LitBool True))
+    If (Lit (LitBool True)) (Lit (LitBool x)) (Lit (LitBool y)) ->
+        let result = (Lit (LitBool x))
         in (result, [LintRedIf expr result])
 
-    If (Lit (LitBool True)) (Lit (LitInt y)) (Var "x") ->
+    If (Lit (LitBool True)) (Lit (LitInt y)) (Var x) ->
         let result = (Lit (LitInt y))
         in (result, [LintRedIf expr result])
 
-    If (Lit (LitBool True)) (Infix Add (Var "x") (Lit (LitInt x))) (Lit (LitInt y)) ->
-        let result = (Infix Add (Var "x") (Lit (LitInt x)))
+    If (Lit (LitBool True)) (Infix Add (Var w) (Lit (LitInt x))) (Lit (LitInt y)) ->
+        let result = (Infix Add (Var w) (Lit (LitInt x)))
         in (result, [LintRedIf expr result])
 
     {- If (Lit (LitBool False)) left right ->
@@ -190,9 +196,9 @@ lintRedIfCond expr = case expr of
         let result = left
         in (result, [LintRedIf expr result]) -}
 
-    Infix Add (Var "x") other -> 
+    Infix Add (Var x) other -> 
         let (simplifiedThen, suggestionsThen) = lintRedIfCond other
-        in (Infix Add (Var "x") simplifiedThen, suggestionsThen)
+        in (Infix Add (Var x) simplifiedThen, suggestionsThen)
 
     Infix Add (Lit (LitInt y)) other -> 
         let (simplifiedThen, suggestionsThen) = lintRedIfCond other
@@ -355,9 +361,9 @@ lintNull expr = case expr of
         in (Lam name body', suggestions)
 
     -- Caso: funciones anidadas, como en (\ys -> (\ls -> length ls == 0) ys)
-    App (Lam _ body) _ -> 
+    App (Lam name body) _ -> 
         let (body', suggestions) = lintNull body
-        in (Lam "newLambda" body', suggestions)
+        in (Lam name body', suggestions)
 
     -- Si no corresponde a este patrón, devolvemos la expresión original
     _ -> (expr, [])
@@ -372,28 +378,50 @@ lintNull expr = case expr of
 lintAppend :: Linting Expr
 lintAppend expr = case expr of
     -- Caso: e : [] ++ es => e : es
-    Infix Append (Infix Cons e (Lit LitNil)) es -> 
-        let (es', suggestionsE) = lintAppend es  -- Recursivamente simplificamos la lista `es`
-            result = Infix Cons e es'  -- Usamos Infix Cons directamente para e : es
-        in (result, suggestionsE ++ [LintAppend expr result])
+    Infix Append (Infix Cons (Var x) (Lit LitNil)) (Var xs) -> 
+        let result = Infix Cons (Var x) (Var xs)  -- Usamos Infix Cons directamente para e : es
+        in (result, [LintAppend expr result])
+    
+    {- Infix Append (Infix Cons e (Lit LitNil)) es  -> 
+        let (e', suggestions) = lintAppend e
+            (es', suggestionsE) = lintAppend es 
+            result = Infix Cons e' es'
+        in (result, suggestions ++ suggestionsE ++ [LintAppend expr result])  -}
 
-    -- Caso para lambdas, recorrer el cuerpo de la lambda
+    -- Caso: e : [] ++ es => e : es
+    Infix Append (Infix Cons (Var x) (Lit LitNil)) es -> 
+        let (es', suggestionsE) = lintAppend es  -- Recursivamente simplificamos la lista `es`
+            result = Infix Cons (Var x) es'  -- Usamos Infix Cons directamente para e : es
+        in (result, suggestionsE ++ [LintAppend expr result])
+    
+    {- -- Caso para lambdas, recorrer el cuerpo de la lambda
     Lam name body ->
         let (body', suggestions) = lintAppend body
-        in (Lam name body', suggestions)
+        in (Lam name body', suggestions) -}
 
     -- Caso para aplicaciones, aplicar recursivamente la linting
-    App func arg -> 
+    {- App func arg -> 
         let (func', suggestionsFunc) = lintAppend func
             (arg', suggestionsArg) = lintAppend arg
-        in (App func' arg', suggestionsFunc ++ suggestionsArg)
+        in (App func' arg', suggestionsFunc ++ suggestionsArg) -}
 
     -- Caso de `Case`, debemos recorrer las ramas y las expresiones dentro
-    Case expr1 expr2 (name1, name2, expr3) -> 
+    {- Case expr1 expr2 (name1, name2, expr3) -> 
         let (expr1', suggestions1) = lintAppend expr1
             (expr2', suggestions2) = lintAppend expr2
             (expr3', suggestions3) = lintAppend expr3
-        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
+        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3) -}
+
+     -- Caso general de `Append` para evaluar recursivamente `e1` y `e2`
+    Infix Append e1 e2 -> 
+        -- Simplificamos `e1` y `e2` primero
+        let (e1', suggestions1) = lintAppend e1
+            (e2', suggestions2) = lintAppend e2
+            simplifiedExpr = Infix Append e1' e2'
+        in if simplifiedExpr /= expr
+           then (simplifiedExpr, suggestions1 ++ suggestions2)
+           else (expr, suggestions1 ++ suggestions2)
+
 
     -- Si no corresponde a este patrón, devolvemos la expresión original
     _ -> (expr, [])
@@ -406,17 +434,34 @@ lintAppend expr = case expr of
 {- App (Var "f") (App (Var "g") (App (Var "h") (Var "x"))) -}
 lintComp :: Linting Expr
 lintComp expr = case expr of
-    App (Var "g") (App (Var "h") (Var "x")) -> 
-        let result = App (Infix Comp  (Var "g") (Var "h")) (Var "x")  
+    App (Var g) (App (Var h) (Var x)) -> 
+        let result = App (Infix Comp  (Var g) (Var h)) (Var x)  
         in (result, [LintComp expr result])
     
-    App (Var "f") (App (Var "g") (Lit (LitInt h))) -> 
-        let result = App (Infix Comp  (Var "f") (Var "g")) (Lit (LitInt h)) 
+    App (Var f) (App (Var g) (Lit (LitInt h))) -> 
+        let result = App (Infix Comp  (Var f) (Var g)) (Lit (LitInt h)) 
         in (result, [LintComp expr result])
 
-    App (Var "f") (App (Lam "y" (Infix Sub (Var "y") (Lit (LitInt 2)))) (Var "z")) -> 
-        let result = App (Infix Comp  (Var "f") (Lam "y" (Infix Sub (Var "y") (Lit (LitInt 2))))) (Var "z")  
+    App (Var f) (App (Lam y body) (Var z)) -> 
+        let result = App (Infix Comp (Var f) (Lam y body)) (Var z) 
         in (result, [LintComp expr result])
+
+    App (Var f) (App (Infix Comp (Var g) (Var h)) (Var x)) -> 
+        let result = App (Infix Comp (Var f) (Infix Comp (Var g) (Var h))) (Var x) 
+        in (result, [LintComp expr result])
+    
+    {- App (Lam d body') (App (Var g) (App (Lam y body) (Var x))) -> 
+        let result = App (Infix Comp (Lam d body') (Infix Comp (Var g) (Lam y body))) (Var x) 
+        in (result, [LintComp expr result]) -}
+    
+
+    -- Caso de aplicación anidada con expresión general en el segundo argumento
+    {- App (App (Var f) expr1) expr2 ->
+        let (expr1', suggestions1) = lintComp expr1
+            (expr2', suggestions2) = lintComp expr2
+            result = App (Infix Comp (Var f) expr1') expr2'
+        in (result, suggestions1 ++ suggestions2) -}
+
 
    {-  -- Caso: f (g t) => (f . g) t
     App f (App g t) -> 
@@ -439,19 +484,13 @@ lintComp expr = case expr of
         let (body', suggestions) = lintComp body
         in (Lam name body', suggestions)
 
-    {- -- Caso para aplicaciones, aplicar recursivamente la linting
-    App func arg -> 
-        let (func', suggestionsFunc) = lintComp func
-            (arg', suggestionsArg) = lintComp arg
-        in (App func' arg', suggestionsFunc ++ suggestionsArg) -}
-
     -- Caso de `Case`, debemos recorrer las ramas y las expresiones dentro
-    {- Case expr1 expr2 (name1, name2, expr3) -> 
+    Case expr1 expr2 (name1, name2, expr3) -> 
         let (expr1', suggestions1) = lintComp expr1
             (expr2', suggestions2) = lintComp expr2
             (expr3', suggestions3) = lintComp expr3
         in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
- -}
+
     App e1 e2 -> 
         let (e1', suggestionsLeft) = lintComp e1
             (e2', suggestionsRight) = lintComp e2
@@ -473,10 +512,14 @@ lintEta :: Linting Expr
 lintEta expr = case expr of
     -- Caso: \ls -> null ls
     Lam ls (App (Var f) (Var ls2)) | ls == ls2 && not (ls `elem` freeVariables (Var f)) ->
-        -- Realizamos la reducción: \ls -> null ls → null
-        let result = Var f  -- Reemplazamos por null
+        let result = Var f  
         in (result, [LintEta expr result])
+    
+{-     Lam ls (App e1 (Var x)) | not (ls `elem` freeVariables (e1)) ->
+        let result = e1 
+        in (result, [LintEta expr result]) -}
 
+{- && not (l `elem` freeVariables (e1)) && not (xs `elem` freeVariables (e1)) && not (func `elem` freeVariables (e1)) -}
      -- Caso: \x -> e x
     Lam x (App e (Var x')) | x == x' && not (x `elem` freeVariables e) ->
         let result = e  -- Realizamos la reducción
@@ -486,7 +529,7 @@ lintEta expr = case expr of
     Lam name body -> 
         let (body', suggestions) = lintEta body
         in (Lam name body', suggestions)
-    
+
     App e1 e2 -> 
         let (e1', suggestions1) = lintEta e1
             (e2', suggestions2) = lintEta e2
