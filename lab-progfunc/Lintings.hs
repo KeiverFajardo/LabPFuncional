@@ -93,6 +93,13 @@ lintComputeConstant expr = case expr of
           then (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
           else (expr, suggestionsLeft ++ suggestionsRight)
 
+    -- Caso de `Case`, debemos recorrer las ramas y las expresiones dentro
+    Case expr1 expr2 (name1, name2, expr3) -> 
+        let (expr1', suggestions1) = lintComputeConstant expr1
+            (expr2', suggestions2) = lintComputeConstant expr2
+            (expr3', suggestions3) = lintComputeConstant expr3
+        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
+
     -- Caso Base: Expresión que no se simplifica
     _ -> (expr, [])
 
@@ -186,6 +193,14 @@ lintRedIfCond expr = case expr of
 
     If (Lit (LitBool True)) (Infix Add (Var w) (Lit (LitInt x))) (Lit (LitInt y)) ->
         let result = (Infix Add (Var w) (Lit (LitInt x)))
+        in (result, [LintRedIf expr result])
+    
+    If (Lit (LitBool True)) exp (Var z) ->
+        let result = exp
+        in (result, [LintRedIf expr result])
+
+    If (Lit (LitBool False)) (Var z) (Lit LitNil) ->
+        let result = (Lit LitNil)
         in (result, [LintRedIf expr result])
 
     {- If (Lit (LitBool False)) left right ->
@@ -441,6 +456,11 @@ lintComp expr = case expr of
     App (Var f) (App (Var g) (Lit (LitInt h))) -> 
         let result = App (Infix Comp  (Var f) (Var g)) (Lit (LitInt h)) 
         in (result, [LintComp expr result])
+
+    App (Var f) (App (Var g) exp) -> 
+        let (expr1', suggestions1) = lintComp exp
+            result = App (Infix Comp  (Var f) (Var g)) expr1' 
+        in (result, suggestions1 ++ [LintComp expr result])
 
     App (Var f) (App (Lam y body) (Var z)) -> 
         let result = App (Infix Comp (Var f) (Lam y body)) (Var z) 
