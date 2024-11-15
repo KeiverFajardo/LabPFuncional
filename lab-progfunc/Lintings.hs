@@ -31,7 +31,18 @@ boundVariables (Infix _ e1 e2) =  boundVariables e1 ++ boundVariables e2
 boundVariables (If cond th el) = boundVariables cond ++ boundVariables th ++ boundVariables el
 boundVariables (Case e1 e2 (n1, n2, e3)) =
     boundVariables e1 ++ boundVariables e2 ++ boundVariables e3
+
+-- Computa la lista de variables validas de una expresión
+validVariables :: [Name] -> [Name] -> [Name]
+validVariables freeVars boundVars = filter (`notElem` boundVars) freeVars
+
+appVariables :: [Name] -> Expr
+appVariables []       = Lit LitNil
+appVariables [x]      = Var x
+appVariables (x:xs)   = foldl App (Var x) (map Var xs)
+
 --------------------------END CODIGO AGREGADO
+
 
 --------------------------------------------------------------------------------
 -- LINTINGS
@@ -683,34 +694,21 @@ performEtaReduction original reduced suggestions =
 
 lintEta :: Linting Expr
 lintEta expr = case expr of
-     -- Caso: \x -> e x
-    Lam rs (App (App (Var f) (Var x)) (Var rs')) | rs == rs' && not (rs `elem` freeVariables (Var f)) && not (rs `elem` freeVariables (Var x)) ->
-        let result = App (Var f) (Var x)  -- Realizamos la reducción
+    Lam x (App e (Var x')) | x == x' && not (x `elem` (validVariables (freeVariables e) (boundVariables e))) ->
+        let result = appVariables ((validVariables (freeVariables e) (boundVariables e))) -- Realizamos la reducción
         in (result, [LintEta expr result])
-
-    Lam x (App e (Var x')) | x == x' && not (x `elem` freeVariables e) ->
-        let result = e  -- Realizamos la reducción
-        in (result, [LintEta expr result])
-
-    -- Caso: \x -> (\y -> f y x) -> debe propagarse correctamente
-    Lam x (Lam y (App (App (Var f) (Var y')) (Var x'))) 
-        | y == y' && x == x' && not (y `elem` freeVariables (Var f)) ->
-            let innerResult = App (Var f) (Var y)
-                freeVarsInner = freeVariables innerResult
-                outerFreeVars = propagateFreeVars freeVarsInner (freeVariables (Lam x (Lam y innerResult)))
-                result = Lam x (App innerResult (Var x))
-            in if x `elem` outerFreeVars 
-               then (expr, [])  -- No se puede reducir más porque x es libre
-               else performEtaReduction expr result []
 
     App e1 e2 -> 
         let (e1', suggestions1) = lintEta e1
             (e2', suggestions2) = lintEta e2
         in (App e1' e2', suggestions1 ++ suggestions2)
 
+    
     Lam name body ->
         let (body', suggestions) = lintEta body
-        in (Lam name body', suggestions)
+        in if body' /= body
+           then (Lam name body', suggestions)
+           else (expr, suggestions) 
 
     If e1 e2 e3 -> 
         let (e1', suggestions1) = lintEta e1
