@@ -694,9 +694,13 @@ performEtaReduction original reduced suggestions =
 
 lintEta :: Linting Expr
 lintEta expr = case expr of
-    Lam x (App e (Var x')) | x == x' && not (x `elem` (validVariables (freeVariables e) (boundVariables e))) ->
-        let result = appVariables ((validVariables (freeVariables e) (boundVariables e))) -- Realizamos la reducción
+    Lam x (App (Lam y (App body (Var y'))) (Var x')) | x == x' && y == y' && (x `elem` boundVariables body) && notElem x (freeVariables body) ->
+        let result = Lam y (App body (Var y'))
         in (result, [LintEta expr result])
+
+    Lam x (App e (Var x')) | x == x' && not (x' `elem` freeVariables e) ->
+        let result = e
+        in (result, [LintEta expr result])                      
 
     App e1 e2 -> 
         let (e1', suggestions1) = lintEta e1
