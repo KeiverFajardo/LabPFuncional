@@ -733,7 +733,7 @@ lintEta expr = case expr of
 
     Lam name body ->
         let (body', suggestions) = case body of
-                App e1 e2 -> 
+                App e1 e2 | e2 == appVariables([name]) -> 
                     let (r, eR) = lintEta e1
                     in (r, eR)
                 _         -> lintEta body
