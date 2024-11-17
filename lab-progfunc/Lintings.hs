@@ -725,10 +725,6 @@ Lam name body ->
 -- Propaga las variables libres desde expresiones internas
 lintEta :: Linting Expr
 lintEta expr = case expr of
-    {- Lam x (App (Var y) (Var x')) | x == x' && not (x `elem` freeVariables (Var y)) ->
-        let result = (Var y) 
-        in (result, [LintEta expr result]) -}
-
     Lam x (App e (Var x')) | x == x' ->
         let (e', suggestions) = lintEta e
         in if (x == x' && not (x `elem` freeVariables e') && not (x' `elem` freeVariables e'))
@@ -736,12 +732,24 @@ lintEta expr = case expr of
             else (Lam x (App e' (Var x')), suggestions) 
 
     Lam name body ->
-        let (body', suggestions) = lintEta body
-        in if (not (name `elem` freeVariables body'))
-            then (body', suggestions ++ [LintEta expr body'])
-            else (Lam name body', suggestions) 
+        let (body', suggestions) = case body of
+                App e1 e2 -> 
+                    let (r, eR) = lintEta e1
+                    in (r, eR)
+                _         -> lintEta body
 
-    App e1 e2 -> 
+            (res, sRes) = if not (name `elem` freeVariables body')
+                        then (body', suggestions ++ [LintEta (Lam name (App body (appVariables([name])))) body']) 
+                        else if null suggestions
+                            then (expr, [])
+                            else (body', suggestions)
+        in (res, sRes)
+
+        {- in if (not (name `elem` freeVariables body'))
+            then (body', suggestions ++ [LintEta expr body'])
+            else (Lam name body', suggestions)  -}
+
+    {- App e1 e2 -> 
         let (e1', suggestions1) = lintEta e1
             (e2', suggestions2) = lintEta e2
         in (App e1' e2', suggestions1 ++ suggestions2)
@@ -761,56 +769,12 @@ lintEta expr = case expr of
         let (expr1', suggestions1) = lintEta expr1
             (expr2', suggestions2) = lintEta expr2
             (expr3', suggestions3) = lintEta expr3
-        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
+        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3) -}
 
     -- Si no corresponde a ningún caso, devolvemos la expresión tal cual
     _ -> (expr, [])
 
-    {- Lam x (App e (Var x')) ->
-        let (e', suggestions) = lintEta e
-        in if (x == x' && not (x `elem` freeVariables e'))
-            then (e', suggestions ++ [LintEta (Lam x (App e' (Var x'))) e'])
-            else (Lam x (App e' (Var x')), suggestions)  -}
 
-    
-
-    {- Lam x (App (Var y) (Var x')) | x == x' && not (x `elem` freeVariables (Var y)) ->
-        let result = (Var y) 
-        in (result, [LintEta expr result])
-
-    Lam x (App (App (Var f) (Var y)) (Var x')) | x == x' && not (x `elem` freeVariables (Var y)) && not (x `elem` freeVariables (Var f)) ->
-        let result = (App (Var f) (Var y)) 
-        in (result, [LintEta expr result])  
-
-    Lam z (App (Lam x (App (App (Var f) (Var y)) (Var x'))) (Var z')) | x == x' && z == z'->
-        let (e1', suggestions) = lintEta (Lam x (App (App (Var f) (Var y)) (Var x')))
-            result = e1'
-        in if (z `elem` freeVariables e1')
-            then (Lam z (App e1' (Var z')), suggestions)
-            else (result, suggestions) -}
-        
-                     
-
-    
-    {- Lam name (App body (Var name')) | name == name' ->
-        let (body', suggestions) = lintEta body
-        in if (not (name `elem` boundVariables body'))
-            then (Lam name body', suggestions)
-           else (expr, suggestions)  -}
-
-    {- Lam name body ->
-        let (body', suggestions) = lintEta body
-        in if body' /= body
-           then (Lam name body', suggestions)
-           else (expr, suggestions)   -}
-
-    
-
-{- Lam name body -> 
-        let (body', suggestions) = lintEta body
-        in if body' /= body
-           then (Lam name body', suggestions ++ [LintEta expr (Lam name body')])
-           else (expr, suggestions) -}
 
 --------------------------------------------------------------------------------
 -- Eliminación de recursión con map
