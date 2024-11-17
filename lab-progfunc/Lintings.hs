@@ -19,7 +19,7 @@ freeVariables (App e1 e2) = freeVariables e1 ++ freeVariables e2
 freeVariables (Infix _ e1 e2) =  freeVariables e1 ++ freeVariables e2
 freeVariables (If cond th el) = freeVariables cond ++ freeVariables th ++ freeVariables el
 freeVariables (Case e1 e2 (n1, n2, e3)) =
-    freeVariables e1 ++ freeVariables e2 ++ filter (`notElem` [n1, n2]) (freeVariables e3)
+    freeVariables e1 ++ freeVariables e2 ++ filter (/= n1) (filter (/= n2)  (freeVariables e3))
 
 -- Computa la lista de variables ligadas de una expresión
 boundVariables :: Expr -> [Name]
@@ -607,14 +607,17 @@ lintComp expr = case expr of
         let (e1', suggestionsLeft) = lintComp e1
             result = App (Infix Comp (Var f) e1') (Var x) 
         in (result, suggestionsLeft ++ [LintComp expr result])
-
+    
     App e1 e2 -> 
         let (e1', suggestionsLeft) = lintComp e1
             (e2', suggestionsRight) = lintComp e2
             simplifiedExpr = App e1' e2'
         in if simplifiedExpr /= expr
           then (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
-          else (expr, suggestionsLeft ++ suggestionsRight)
+          else if null suggestionsLeft && null suggestionsRight
+                then (expr, [])
+                else (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
+          
     
     Lam name body ->
         let (body', suggestions) = lintComp body
@@ -677,7 +680,43 @@ lintComp expr = case expr of
         in (result, suggestionsT ++ [LintComp expr result])
  -}
  
+ {- Lam a e1 ->
+        let (e1N, rE1N) = case e1 of 
+                                App (Lam b e3) e4 -> lintErna (Lam b e3) e4 
+                                _                 -> lintEta e1
+            libreVars = varsAux e1N : freeVariables (Lam a e1N)
+            (r, rE) = if not (elem (a) libreVars)
+                        then let eNew = LintEtaAux e1N a
+                            in (eNew, rE1N ++ [LinEta (Lam a e1N) eNew])
+                        else if null rE1N
+                            then (e, [])
+                            else (Lam a e1N, rE1N)
+        in (r, rE)
 
+
+Lam name body ->
+        let (body', suggestions) = case body of
+                        App (Lam e1 e2) e3 -> 
+                            let (res1, eres1) = lintEta (Lam e1 e2)
+                                ress = App res1 e3
+                            in (ress, eres1)
+                        _   -> lintEta body
+            variablesLibres = freeVariables(Lam name body')
+            (resultado, sresultado) = if not (elem (name) variablesLibres)
+                                        then let exprNueva = (App body' (Var name))
+                                            in (exprNueva, suggestions ++ [LintEta (Lam name body') exprNueva])
+                                        else if null suggestions
+                                            then (expr, [])
+                                            else (Lam name body', suggestions)
+        in (resultado, sresultado) -}
+
+
+{-  App e1 (App e2 e3) -> 
+        let (e1', suggestionsE1) = lintComp e1
+            (e2', suggestionsE2) = lintComp e2
+            (e3', suggestionsE3) = lintComp e3
+            result = App (Infix Comp e1' e2') e3'
+        in (result, suggestionsE1 ++ suggestionsE2 ++ suggestionsE3 ++ [LintComp (App e1' (App e2' e3'))  result]) -}
 --------------------------------------------------------------------------------
 -- Eta Redución
 --------------------------------------------------------------------------------
@@ -686,20 +725,20 @@ lintComp expr = case expr of
 -- Propaga las variables libres desde expresiones internas
 lintEta :: Linting Expr
 lintEta expr = case expr of
-    Lam x (App (Var y) (Var x')) | x == x' && not (x `elem` freeVariables (Var y)) ->
+    {- Lam x (App (Var y) (Var x')) | x == x' && not (x `elem` freeVariables (Var y)) ->
         let result = (Var y) 
-        in (result, [LintEta expr result])
+        in (result, [LintEta expr result]) -}
 
-    Lam x (App e (Var x')) ->
+    Lam x (App e (Var x')) | x == x' ->
         let (e', suggestions) = lintEta e
-        in if (x == x' && not (x `elem` freeVariables e'))
+        in if (x == x' && not (x `elem` freeVariables e') && not (x' `elem` freeVariables e'))
             then (e', suggestions ++ [LintEta (Lam x (App e' (Var x'))) e'])
             else (Lam x (App e' (Var x')), suggestions) 
 
     Lam name body ->
         let (body', suggestions) = lintEta body
         in if (not (name `elem` freeVariables body'))
-            then (body', suggestions ++ [LintEta (Lam name body) body'])
+            then (body', suggestions ++ [LintEta expr body'])
             else (Lam name body', suggestions) 
 
     App e1 e2 -> 
@@ -726,7 +765,15 @@ lintEta expr = case expr of
 
     -- Si no corresponde a ningún caso, devolvemos la expresión tal cual
     _ -> (expr, [])
-        
+
+    {- Lam x (App e (Var x')) ->
+        let (e', suggestions) = lintEta e
+        in if (x == x' && not (x `elem` freeVariables e'))
+            then (e', suggestions ++ [LintEta (Lam x (App e' (Var x'))) e'])
+            else (Lam x (App e' (Var x')), suggestions)  -}
+
+    
+
     {- Lam x (App (Var y) (Var x')) | x == x' && not (x `elem` freeVariables (Var y)) ->
         let result = (Var y) 
         in (result, [LintEta expr result])

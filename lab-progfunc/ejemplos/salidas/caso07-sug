@@ -32,14 +32,3 @@ Función: quux
 Usar eta-reducción. Reemplazar por:
 \z -> z + x
 --------------------------------------------------------------------------------
-
-
-
-
-bar = \y -> (\x -> f y x) y
-
-baz = \x -> (\x -> x + 1) x
-
-qux = \xs -> (\ys -> case ys of [] -> 0; (x : xs) -> 1 + xs) xs
-
-quux = \x -> (\y -> (\z -> z + x) y) x
