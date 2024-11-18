@@ -448,9 +448,9 @@ lintNull expr = case expr of
         in (result, suggestionsE ++ [LintNull expr result])
 
     -- Caso: funciones anidadas, como en (\ys -> (\ls -> length ls == 0) ys)  REVISAR ESTA
-    App (Lam name body) _ -> 
+   {-  App (Lam name body) _ -> 
         let (body', suggestions) = lintNull body
-        in (Lam name body', suggestions)
+        in (Lam name body', suggestions) -}
 
     App e1 e2 -> 
         let (e1', suggestions1) = lintNull e1
@@ -878,11 +878,19 @@ lint1 >==> lint2 = \expr ->
 
 -- aplica las transformaciones 'lints' repetidas veces y de forma incremental,
 -- hasta que ya no generen más cambios en 'func'
-lintRec :: Eq a => Linting a -> Linting a
+lintRec :: Linting a -> Linting a
 lintRec lints func = 
     let (func', suggestions) = lints func
-    in if func' == func
+    in case suggestions of
+        [] -> (func, suggestions) -- La lista está vacía
+        _  -> let (finalFunc, moreSuggestions) = lintRec lints func'
+                in (finalFunc, suggestions ++ moreSuggestions)-- La lista no está vacía
+        
+{- lintRec :: Linting a -> Linting a
+lintRec lints func = 
+    let (func', suggestions) = lints func
+    in if null suggestions
       then (func, suggestions)  -- No hay más cambios, se retorna el original
       else 
           let (finalFunc, moreSuggestions) = lintRec lints func'
-          in (finalFunc, suggestions ++ moreSuggestions)
+          in (finalFunc, suggestions ++ moreSuggestions) -}
