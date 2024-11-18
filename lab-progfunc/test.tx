@@ -2,23 +2,23 @@
 02 OK
 03 OK
 04 OK
-05 
+05 Falta que funcione completo sin la bandera
 06 OK
-07 falta el c, s ok
+07 falta el c, s ok // Falta que funcione completo sin la bandera
 08 OK
 09 OK
 10 OK
 11 falta el c, s ok
-12
+12 Falta que funcione completo sin la bandera
 13 OK
 14 OK
 15 OK
-16 falta que se cruza la sug en el ultimo caso Ok con c falta el s
+16 OK
 17 falta un caso de composicion
-18
-19
-20
-21
-22
-23
-24
+18 OK
+19 falla el combinado
+20 OK
+21 c igual, -s sale en orden cruzado pero mismo resultado
+22 OK
+23 OK
+24 falta el caso de la funcion take los demas OK 
