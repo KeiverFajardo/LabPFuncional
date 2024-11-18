@@ -627,6 +627,11 @@ lintComp expr = case expr of
         let (e1', suggestionsLeft) = lintComp e1
             result = App (Infix Comp (Var f) e1') (Var x) 
         in (result, suggestionsLeft ++ [LintComp expr result])
+    
+    App (Var f) (App (Var g) (Infix Add (Lit (LitInt 1)) (Var z))) ->
+        let intermediateExpr = App (Infix Comp (Var f) (Var g)) (Infix Add (Lit (LitInt 1)) (Var z))
+            suggestion = LintComp expr intermediateExpr
+        in (intermediateExpr, [suggestion])
 
     App e1 e2 -> 
         let (e1', suggestionsLeft) = lintComp e1
