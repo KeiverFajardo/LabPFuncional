@@ -604,64 +604,41 @@ lintAppend expr = case expr of
 {- App (Var "f") (App (Var "g") (App (Var "h") (Var "x"))) -}
 lintComp :: Linting Expr
 lintComp expr = case expr of
-    -- Patrón adicional para aplicar una lambda con una operación infija
-    App (Lam x (Infix op (Var x') (Lit lit))) e1 | x == x' ->
-        let (e1', suggestions) = lintComp e1
-            result = App (Lam x (Infix op (Var x) (Lit lit))) e1'
-        in (result, suggestions)
+  -- Caso de composición con dos funciones anidadas: f (g x)
+    App e1 e2 ->
+        let (e1', suggs1) = lintComp e1
+            (e2', suggs2) = lintComp e2
+        in case e2' of
+            App e3 e4 -> (App (Infix Comp e1' e3) e4, suggs1 ++ suggs2 ++ [LintComp (App e1' e2') (App (Infix Comp e1' e3) e4)]) 
+            _ -> (App e1' e2', suggs1 ++ suggs2)
 
-    App (Var g) (App (Var h) (Var x)) -> 
-        let result = App (Infix Comp  (Var g) (Var h)) (Var x)  
-        in (result, [LintComp expr result])
-    
-    App (Var f) (App (Var g) (Lit (LitInt h))) -> 
-        let result = App (Infix Comp  (Var f) (Var g)) (Lit (LitInt h)) 
-        in (result, [LintComp expr result])
+    Infix op e1 e2 ->
+        let (e1', suggs1) = lintComp e1
+            (e2', suggs2) = lintComp e2
+        in (Infix op e1' e2', suggs1 ++ suggs2)
 
-    App (Lam name body) e1 -> 
-        let (e1', suggestionsLeft) = lintComp e1
-            result = App (Lam name body) e1'
-        in (result, suggestionsLeft ++ [LintComp expr result])
+    -- Caso de If con transformaciones en ambas ramas
+    If cond thenExpr elseExpr ->
+        let (transformedThen, suggsThen) = lintComp thenExpr
+            (transformedElse, suggsElse) = lintComp elseExpr
+            transformedIf = If cond transformedThen transformedElse
+        in (transformedIf, suggsThen ++ suggsElse)
 
-    App (Var f) (App e1 (Var x)) -> 
-        let (e1', suggestionsLeft) = lintComp e1
-            result = App (Infix Comp (Var f) e1') (Var x) 
-        in (result, suggestionsLeft ++ [LintComp expr result])
+    -- Caso de Case con transformaciones
+    Case expr caseNil (name1, name2, caseCons) ->
+        let (transformedExpr, suggsExpr) = lintComp expr
+            (transformedCaseNil, suggsNil) = lintComp caseNil
+            (transformedCaseCons, suggsCons) = lintComp caseCons
+        in (Case transformedExpr transformedCaseNil (name1, name2, transformedCaseCons),
+            suggsExpr ++ suggsNil ++ suggsCons)
 
-    App e1 e2 -> 
-        let (e1', suggestionsLeft) = lintComp e1
-            (e2', suggestionsRight) = lintComp e2
-            simplifiedExpr = App e1' e2'
-        in if simplifiedExpr /= expr
-          then (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
-          else if null suggestionsLeft && null suggestionsRight
-                then (expr, [])
-                else (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
-          
-    
+    -- Caso de Lambda con transformaciones en el cuerpo
     Lam name body ->
-        let (body', suggestions) = lintComp body
-        in (Lam name body', suggestions)
+        let (transformedBody, suggestions) = lintComp body
+        in (Lam name transformedBody, suggestions)
 
-    If e1 e2 e3 -> 
-        let (e1', suggestions1) = lintComp e1
-            (e2', suggestions2) = lintComp e2
-            (e3', suggestions3) = lintComp e3
-        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
-
-    Infix op e2 e3 ->
-        let (e2', suggestions2) = lintComp e2
-            (e3', suggestions3) = lintComp e3
-        in (Infix op e2' e3', suggestions2 ++ suggestions3)
-
-    Case expr1 expr2 (name1, name2, expr3) -> 
-        let (expr1', suggestions1) = lintComp expr1
-            (expr2', suggestions2) = lintComp expr2
-            (expr3', suggestions3) = lintComp expr3
-        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
-
-    -- Si no corresponde a este patrón, devolvemos la expresión original
-    _ -> (expr, [])
+    -- Otros casos: no transformar
+    e -> (e, [])
 
     {- App (Var f) (App (Var g) exp) -> 
         let (expr1', suggestions1) = lintComp exp
@@ -745,78 +722,44 @@ Lam name body ->
 -- Propaga las variables libres desde expresiones internas
 lintEta :: Linting Expr
 lintEta expr = case expr of
-    {- Version1 -}
-    {- Lam x (App e (Var x')) | x == x' ->
-                                let (e', suggestions) = lintEta e
-                                in if (x == x' && not (x `elem` freeVariables e') && not (x' `elem` freeVariables e'))
-                                    then (e', suggestions ++ [LintEta (Lam x (App e' (Var x'))) e'])
-                                    else (Lam x (App e' (Var x')), suggestions) 
-                            | otherwise -> (Lam x (App e (Var x')), [])
+  -- Caso genérico de eta-reducción
+  Lam x e1 ->
+    let (e1', suggs1) = lintEta e1 -- Aplicamos recursión al cuerpo de la lambda
+    in case e1' of
+      App e2 (Var y) | x == y && notElem x (freeVariables e2) ->
+        -- Si cumple las condiciones de eta-reducción
+        (e2, suggs1 ++ [LintEta (Lam x e1') e2])
+      _ -> (Lam x e1', suggs1) -- Si no aplica, devolvemos la lambda transformada recursivamente
 
-    Lam name body ->
-        let (body', suggestions) = case body of
-                App e1 e2 | e2 == appVariables([name]) -> 
-                                let (r, eR) = lintEta e1
-                                in (r, eR)
-                            | otherwise -> (App e1 e2, [])
-                _         -> 
-                                let (r, eR) = lintEta body
-                                    reducedExpr = Lam name r
-                                in case reducedExpr of
-                                    Lam y (App e (Var y')) | y == y' && not (y `elem` freeVariables e) ->
-                                        let newExpr = e
-                                            suggestion = LintEta reducedExpr newExpr
-                                        in (newExpr, suggestions ++ [suggestion])    
-                                    _ -> (reducedExpr, suggestions)
+  {- Lam name body ->
+    let (transformedBody, suggestions) = lintEta body
+    in (Lam name transformedBody, suggestions) -}
 
-            (res, sRes) = if not (name `elem` freeVariables body')
-                        then (body', suggestions ++ [LintEta (Lam name (App body (appVariables([name])))) body']) 
-                        else if null suggestions
-                            then (expr, [])
-                            else (body', suggestions)
-        in (res, sRes) -}
-    {- Fin Version1 -}
-    {- Version2 -}
-    Lam x (App e (Var x')) | x == x' && not (x `elem` freeVariables e) ->
-        let (e', suggestions) = lintEta e
-            suggestion = LintEta (Lam x (App e (Var x'))) e'
-        in (e', suggestions ++ [suggestion])
+  App e1 e2 ->
+    let (e1', suggs1) = lintEta e1
+        (e2', suggs2) = lintEta e2
+    in (App e1' e2', suggs1 ++ suggs2)
 
-    -- Caso general para lambda
-    Lam x body ->
-        let (body', suggestions) = lintEta body
-        in if x `elem` freeVariables body'
-           then (Lam x body', suggestions) -- No aplica eta-reducción
-           else
-               let suggestion = LintEta (Lam x body') body'
-               in (body', suggestions ++ [suggestion])
-     {- Fin Version2 -}
-    App e1 e2 -> 
-        let (e1', suggestions1) = lintEta e1
-            (e2', suggestions2) = lintEta e2
-        in (App e1' e2', suggestions1 ++ suggestions2)
+  Infix op e1 e2 ->
+    let (e1', suggs1) = lintEta e1
+        (e2', suggs2) = lintEta e2
+    in (Infix op e1' e2', suggs1 ++ suggs2)
 
-    If e1 e2 e3 -> 
-        let (e1', suggestions1) = lintEta e1
-            (e2', suggestions2) = lintEta e2
-            (e3', suggestions3) = lintEta e3
-        in (If e1' e2' e3', suggestions1 ++ suggestions2 ++ suggestions3)
+  If cond thenExpr elseExpr ->
+    let (transformedThen, suggsThen) = lintEta thenExpr
+        (transformedElse, suggsElse) = lintEta elseExpr
+        transformedIf = If cond transformedThen transformedElse
+    in (transformedIf, suggsThen ++ suggsElse)
 
-    Infix op e2 e3 ->
-        let (e2', suggestions2) = lintEta e2
-            (e3', suggestions3) = lintEta e3
-        in (Infix op e2' e3', suggestions2 ++ suggestions3)
+  Case expr caseNil (name1, name2, caseCons) ->
+    let (transformedExpr, suggsExpr) = lintEta expr
+        (transformedCaseNil, suggsNil) = lintEta caseNil
+        (transformedCaseCons, suggsCons) = lintEta caseCons
+    in (Case transformedExpr transformedCaseNil (name1, name2, transformedCaseCons),
+        suggsExpr ++ suggsNil ++ suggsCons)
 
-    Case expr1 expr2 (name1, name2, expr3) -> 
-        let (expr1', suggestions1) = lintEta expr1
-            (expr2', suggestions2) = lintEta expr2
-            (expr3', suggestions3) = lintEta expr3
-        in (Case expr1' expr2' (name1, name2, expr3'), suggestions1 ++ suggestions2 ++ suggestions3)
-
-    -- Si no corresponde a ningún caso, devolvemos la expresión tal cual
-    _ -> (expr, [])
-
-
+  -- Otros casos: no transformar
+  e -> (e, [])
 
 --------------------------------------------------------------------------------
 -- Eliminación de recursión con map
