@@ -242,25 +242,25 @@ lintRedIfCond expr = case expr of
         let result = (Infix Add (Var w) (Lit (LitInt x)))
         in (result, [LintRedIf expr result])
     
-    If (Lit (LitBool True)) exp (Var z) ->
-        let result = exp
-        in (result, [LintRedIf expr result])
-
     If (Lit (LitBool False)) (Var z) (Lit LitNil) ->
         let result = (Lit LitNil)
         in (result, [LintRedIf expr result])
     
     If (Lit (LitBool False)) (Lit LitNil) e1 ->
-        let result = e1
-        in (result, [LintRedIf expr result])
+        let (e1', suggestions2) = lintRedIfCond e1
+        in (e1', suggestions2 ++ [LintRedIf expr e1'])
 
     If (Lit (LitBool False)) e1 e2 ->
-        let result = e2
-        in (result, [LintRedIf expr result])
+        let (e2', suggestions2) = lintRedIfCond e2
+        in (e2', suggestions2 ++ [LintRedIf expr e2'])
+
+    If (Lit (LitBool True)) exp (Var z) ->
+        let (e1', suggestions2) = lintRedIfCond exp
+        in (e1', suggestions2 ++ [LintRedIf expr e1'])
 
     If (Lit (LitBool True)) e1 e2 ->
-        let result = e1
-        in (result, [LintRedIf expr result])
+        let (e1', suggestions2) = lintRedIfCond e1
+        in (e1', suggestions2 ++ [LintRedIf expr e1'])
 
     {- If (Lit (LitBool False)) left right ->
         let result = right
