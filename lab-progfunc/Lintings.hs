@@ -106,8 +106,38 @@ lintComputeConstant expr = case expr of
             (right', suggestionsRight) = lintComputeConstant right
             simplifiedExpr = Infix op left' right'
         in if simplifiedExpr /= expr
-          then (simplifiedExpr, suggestionsLeft ++ suggestionsRight)
-          else (expr, suggestionsLeft ++ suggestionsRight)
+            then let (finalExpr, finalSuggestions) = lintComputeConstant simplifiedExpr
+             in (finalExpr, suggestionsLeft ++ suggestionsRight ++ finalSuggestions)
+            else (expr, suggestionsLeft ++ suggestionsRight)
+
+    {- Infix op left right ->
+        let (left', suggestionsLeft) = lintComputeConstant left
+            (right', suggestionsRight) = lintComputeConstant right
+            simplifiedExpr = Infix op left' right'
+        in case left' of
+            Lit (LitInt (x)) -> 
+                let (newResult, suggestionsnewResult)  = lintComputeConstant simplifiedExpr
+                in (newResult, suggestionsLeft ++ suggestionsRight ++ suggestionsnewResult)
+            _ -> (simplifiedExpr, suggestionsLeft ++ suggestionsRight) -}
+            
+    {- Lam name body ->
+        let (body', suggestions) = lintEta body
+        in case body' of
+            App e1 (Var x) 
+                | x == name && not (name `elem` freeVariables e1) ->
+                    (e1, suggestions ++ [LintEta (Lam name body') e1])
+            _ -> (Lam name body', suggestions)
+    {- FinVersion3 -}
+
+    App e1 e2 -> 
+        let (e1', suggestionsE1) = lintComp e1
+            (e2', suggestionsE2) = lintComp e2
+            simplifiedExpr = App e1' e2'
+        in case e2' of
+            App left right -> 
+                let newResult = App (Infix Comp e1' left) right
+                in (newResult, suggestionsE1 ++ suggestionsE2 ++ [LintComp simplifiedExpr newResult])
+            _ -> (simplifiedExpr, suggestionsE1 ++ suggestionsE2) -}
 
     Case expr1 expr2 (name1, name2, expr3) -> 
         let (expr1', suggestions1) = lintComputeConstant expr1
@@ -742,7 +772,7 @@ lintEta expr = case expr of
                     (e1, suggestions ++ [LintEta (Lam name body') e1])
             _ -> (Lam name body', suggestions)
     {- FinVersion3 -}
-
+    
     App e1 e2 -> 
         let (e1', suggestions1) = lintEta e1
             (e2', suggestions2) = lintEta e2
