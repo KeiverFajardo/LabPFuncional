@@ -196,19 +196,19 @@ lintRedIfCond expr = case expr of
     
     If (Lit (LitBool False)) (Lit LitNil) e1 ->
         let (e1', suggestions2) = lintRedIfCond e1
-        in (e1', suggestions2 ++ [LintRedIf expr e1'])
+        in (e1', suggestions2 ++ [LintRedIf (If (Lit (LitBool False)) (Lit LitNil) e1') e1'])
 
     If (Lit (LitBool False)) e1 e2 ->
         let (e2', suggestions2) = lintRedIfCond e2
-        in (e2', suggestions2 ++ [LintRedIf expr e2'])
+        in (e2', suggestions2 ++ [LintRedIf (If (Lit (LitBool False)) e1 e2') e2'])
 
-    If (Lit (LitBool True)) exp (Var z) ->
-        let (e1', suggestions2) = lintRedIfCond exp
-        in (e1', suggestions2 ++ [LintRedIf expr e1'])
+    If (Lit (LitBool True)) e1 (Var z) ->
+        let (e1', suggestions2) = lintRedIfCond e1
+        in (e1', suggestions2 ++ [LintRedIf (If (Lit (LitBool True)) e1' (Var z)) e1'])
 
     If (Lit (LitBool True)) e1 e2 ->
         let (e1', suggestions2) = lintRedIfCond e1
-        in (e1', suggestions2 ++ [LintRedIf expr e1'])
+        in (e1', suggestions2 ++ [LintRedIf (If (Lit (LitBool True)) e1' e2) e1'])
 
     Infix Add (Var x) other -> 
         let (simplifiedThen, suggestionsThen) = lintRedIfCond other
